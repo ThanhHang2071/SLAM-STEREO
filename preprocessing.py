@@ -152,7 +152,7 @@ def save_frame():
             ret1, frame1 = cap1.read() # right
 
             if not ret0 or not ret1:
-                break
+                break``
 
             cv2.imshow('test0',frame0)
             cv2.imshow('test1', frame1)
@@ -192,6 +192,56 @@ def main(mtx, dist) :
 
     cv2.destroyAllWindows()
 
+def showCamRemap():
+    # Camera parameters to undistort and rectify images
+    cv_file = cv2.FileStorage()
+    cv_file.open('stereoMap.xml', cv2.FileStorage_READ)
+    print('Opened')
+
+    stereoMapL_x = cv_file.getNode('stereoMapL_x').mat()
+    stereoMapL_y = cv_file.getNode('stereoMapL_y').mat()
+    stereoMapR_x = cv_file.getNode('stereoMapR_x').mat()
+    stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
+
+    # Open both cameras
+    # cap_right = cv2.VideoCapture(2, cv2.CAP_DSHOW)                    
+    # cap_left =  cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
+    cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1, flip_method=2), cv2.CAP_GSTREAMER)
+
+
+
+    while(cap1.isOpened() and cap0.isOpened()):
+
+        ret0, frame0 = cap0.read() # left
+        ret1, frame1 = cap1.read() # right
+
+        # Undistort and rectify images
+        frame1_remap = cv2.remap(frame1, stereoMapR_x, stereoMapR_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+        frame0_remap = cv2.remap(frame0, stereoMapL_x, stereoMapL_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+                        
+        # Show the frames
+        cv2.imshow("frame right remap", frame1_remap) 
+        cv2.imshow("frame left remap", frame0_remap)
+        # cv2.imshow("frame left", frame0)
+        # cv2.imshow("frame right", frame1)
+
+        # k = cv2.waitKey(1)
+
+
+        # Hit "q" to close the window
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+
+    
+    # Release and destroy all windows before termination
+    cap1.release()
+    cap0.release()
+
+    cv2.destroyAllWindows()
+
 
 if __name__ == '__main__':
     # save_frame()
@@ -199,6 +249,9 @@ if __name__ == '__main__':
     imgs_folder = 'images'
     intrinsic_matrix_Left, distort_Left, intrinsic_matrix_Right, distort_Right = calib(imgs_folder, square_size=2.8, board_size=(4,3))
     main(intrinsic_matrix_Left, distort_Left)
+    main(intrinsic_matrix_Left, distort_Left)
+
+    showCamRemap()
 
 
 
