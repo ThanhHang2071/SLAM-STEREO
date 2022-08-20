@@ -178,15 +178,10 @@ def save_frame():
 
 
 def showCamRemap():
-    # Camera parameters to undistort and rectify images
-    cv_file = cv2.FileStorage()
-    cv_file.open('stereoMap.xml', cv2.FileStorage_READ)
-    print('Opened')
+ 
+    cv_file =readFileMap()
 
-    stereoMapL_x = cv_file.getNode('stereoMapL_x').mat()
-    stereoMapL_y = cv_file.getNode('stereoMapL_y').mat()
-    # stereoMapR_x = cv_file.getNode('stereoMapR_x').mat()
-    # stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
+    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y = getNode(cv_file)
     
 
     # cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
@@ -224,6 +219,36 @@ def showCamRemap():
     cv2.destroyAllWindows()
 
 
+# Downsamples image x number (reduce_factor) of times. 
+def downsample_image(image, reduce_factor):
+	for i in range(0,reduce_factor):
+		#Check if image is color or grayscale
+		if len(image.shape) > 2:
+			row,col = image.shape[:2]
+		else:
+			row,col = image.shape
+
+		image = cv2.pyrDown(image, dstsize= (col//2, row // 2))
+	return image
+
+
+def readFileMap():
+    # Camera parameters to undistort and rectify images
+    cv_file = cv2.FileStorage()
+    cv_file.open('stereoMap.xml', cv2.FileStorage_READ)
+    print('Read file successfully')
+    return cv_file
+
+
+def getNode(cv_file):
+    stereoMapL_x = cv_file.getNode('stereoMapL_x').mat()
+    stereoMapL_y = cv_file.getNode('stereoMapL_y').mat()
+    stereoMapR_x = cv_file.getNode('stereoMapR_x').mat()
+    stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
+    return stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y
+
+
+
 if __name__ == '__main__':
     # save_frame()
 
@@ -232,7 +257,9 @@ if __name__ == '__main__':
     # main(intrinsic_matrix_Left, distort_Left)
     # main(intrinsic_matrix_Left, distort_Left)
 
-    showCamRemap()
+    readFileMap()
+
+    # showCamRemap()
 
 
 
