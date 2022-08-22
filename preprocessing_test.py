@@ -2,6 +2,10 @@ import sys
 import glob
 import cv2 
 import numpy as np
+from tqdm import tqdm
+import PIL.ExifTags
+import PIL.Image
+from matplotlib import pyplot as plt 
 
 def gstreamer_pipeline(
     sensor_id=0,
@@ -179,37 +183,32 @@ def save_frame():
 
 def showCamRemap():
  
-    cv_file =readFileMap()
+    cv_file = readFileMap()
 
-    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y = getNode(cv_file)
+    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y = getNodes(cv_file)
     
 
-    # cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
-    # cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1, flip_method=2), cv2.CAP_GSTREAMER)
-    cap0 = cv2.VideoCapture(0)
+    cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
+    cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1, flip_method=2), cv2.CAP_GSTREAMER)
+    # cap0 = cv2.VideoCapture(0)
 
 
     # while(cap1.isOpened() and cap0.isOpened()):
     while(cap0.isOpened()):
 
-        ret0, frame0 = cap0.read() # left
-        # ret1, frame1 = cap1.read() # right
-
-        # Undistort and rectify images
-        # frame1_remap = cv2.remap(frame1, stereoMapR_x, stereoMapR_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
-        frame0_remap = cv2.remap(frame0, stereoMapL_x, stereoMapL_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
-                        
+        frame0_remap, frame0, frame1_remap, frame1 = frame_remap(cap0, cap1, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y)
         # Show the frames
         cv2.imshow("frame left remap", frame0_remap)
-        # cv2.imshow("frame right remap", frame1_remap) 
+        cv2.imshow("frame right remap", frame1_remap) 
         cv2.imshow("frame left", frame0)
-        # cv2.imshow("frame right", frame1)
+        cv2.imshow("frame right", frame1)
 
 
         # Hit "q" to close the window
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+    
 
     
     # Release and destroy all windows before termination
@@ -240,26 +239,177 @@ def readFileMap():
     return cv_file
 
 
-def getNode(cv_file):
+def getNodes(cv_file):
     stereoMapL_x = cv_file.getNode('stereoMapL_x').mat()
     stereoMapL_y = cv_file.getNode('stereoMapL_y').mat()
     stereoMapR_x = cv_file.getNode('stereoMapR_x').mat()
     stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
+    
     return stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y
+
+def frame_remap(cap0, cap1, imgRight, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y):
+    ret0, frame0 = cap0.read() # left
+    ret1, frame1 = cap1.read() # right
+
+    # Undistort and rectify images
+    frame0_remap = cv2.remap(frame0, stereoMapL_x, stereoMapL_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+    frame1_remap = cv2.remap(frame1, stereoMapR_x, stereoMapR_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+    return frame0_remap,  frame0, frame1_remap,  frame1
+
+def image_remap(imgLeft, imgRight, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y):
+    imgL = cv2.imread(imgLeft) # left
+    imgR = cv2.imread(imgRight) # right
+
+    # Undistort and rectify images
+    imgL_remap = cv2.remap(imgL, stereoMapL_x, stereoMapL_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+    imgR_remap = cv2.remap(imgR, stereoMapR_x, stereoMapR_y, cv2.INTER_LANCZOS4, cv2.BORDER_CONSTANT, 0)
+    return imgL_remap,  imgL, imgR_remap,  imgR
+
+
+def DisparityMap(imgLeft, imgRight):
+    
+    
+    cv_file = readFileMap()
+
+    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y = getNodes(cv_file)
+    
+    
+    imgL_remap,  imgL, imgR_remap,  imgR = image_remap(imgLeft, imgRight, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y)
+    
+    # # Show the frames
+    # cv2.imshow("frame right", imgR) 
+    # cv2.imshow("frame left", imgL)
+
+    # cv2.waitKey(0)
+    
+    
+    # Show the frames
+    # cv2.imshow("frame left undistorted", imgL_remap)
+    # cv2.imshow("frame right undistorted", imgR_remap) 
+    # cv2.waitKey(0)
+    
+    # Downsample each image 3 times (because they're too big)
+    imgL = downsample_image(imgL_remap,3)
+    imgR = downsample_image(imgR_remap,3)
+
+    imgLgray = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
+    imgRgray = cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)
+
+    # # Show the frames
+    # cv2.imshow("frame right downscaled", imgR) 
+    # cv2.imshow("frame left downscaled", imgL)
+    # cv2.waitKey(0)
+    
+    #=========================================================
+    # Create Disparity map from Stereo Vision
+    #=========================================================
+
+    # For each pixel algorithm will find the best disparity from 0
+    # Larger block size implies smoother, though less accurate disparity map
+
+    # Set disparity parameters
+    # Note: disparity range is tuned according to specific parameters obtained through trial and error. 
+    block_size = 5
+    min_disp = -1
+    max_disp = 31
+    num_disp = max_disp - min_disp # Needs to be divisible by 16
+
+    # Create Block matching object. 
+    stereo = cv2.StereoSGBM_create(minDisparity= min_disp,
+        numDisparities = num_disp,
+        blockSize = block_size,
+        uniquenessRatio = 5,
+        speckleWindowSize = 5,
+        speckleRange = 2,
+        disp12MaxDiff = 2,
+        P1 = 8 * 3 * block_size**2,#8*img_channels*block_size**2,
+        P2 = 32 * 3 * block_size**2) #32*img_channels*block_size**2)
+
+
+    #stereo = cv2.StereoBM_create(numDisparities=num_disp, blockSize=win_size)
+
+    # Compute disparity map
+    disparity_map = stereo.compute(imgLgray, imgRgray)
+
+    # # Show disparity map before generating 3D cloud to verify that point cloud will be usable. 
+    # plt.imshow(disparity_map,'gray')
+    # plt.show()
+
+    # #=========================================================
+    # # Generate Point Cloud from Disparity Map
+    # #=========================================================
+
+    # Get new downsampled width and height 
+    h,w = imgR.shape[:2]
+    f = 0.8 * w  # guess for focal length
+    Q = np.float32([[1, 0, 0, -0.5 * w],
+                    [0, -1, 0, 0.5 * h],  # turn points 180 deg around x-axis,
+                    [0, 0, 0, -f],  # so that y-axis looks up
+                    [0, 0, 1, 0]])
+
+    # Convert disparity map to float32 and divide by 16 as show in the documentation
+    print("disparity_map.dtype : ", disparity_map.dtype)
+    disparity_map = np.float32(np.divide(disparity_map, 16.0))
+    print("disparity_map.dtype : ", disparity_map.dtype)
+
+    # Reproject points into 3D
+    points_3D = cv2.reprojectImageTo3D(disparity_map, Q, handleMissingValues=False)
+    # Get color of the reprojected points
+    colors = cv2.cvtColor(imgR, cv2.COLOR_BGR2RGB)
+
+    # Get rid of points with value 0 (no depth)
+    mask_map = disparity_map > disparity_map.min()
+
+    # Mask colors and points. 
+    output_points = points_3D[mask_map]
+    output_colors = colors[mask_map]
+    
+    return output_points, output_colors
+
+
+def create_point_cloud_file(vertices, colors, filename):
+	colors = colors.reshape(-1,3)
+	vertices = np.hstack([vertices.reshape(-1,3),colors])
+
+	ply_header = '''ply
+		format ascii 1.0
+		element vertex %(vert_num)d
+		property float x
+		property float y
+		property float z
+		property uchar red
+		property uchar green
+		property uchar blue
+		end_header
+		'''
+	with open(filename, 'w') as f:
+		f.write(ply_header %dict(vert_num=len(vertices)))
+		np.savetxt(f,vertices,'%f %f %f %d %d %d')
 
 
 
 if __name__ == '__main__':
     # save_frame()
 
-    # imgs_folder = 'images'
+    imgs_folder = 'images'
     # intrinsic_matrix_Left, distort_Left, intrinsic_matrix_Right, distort_Right = calib(imgs_folder, square_size=2.8, board_size=(4,3))
     # main(intrinsic_matrix_Left, distort_Left)
     # main(intrinsic_matrix_Left, distort_Left)
 
-    readFileMap()
+    # readFileMap()
 
     # showCamRemap()
+    
+    ## Image choose
+    imgLeft = imgs_folder + "/left/601.jpg"
+    imgRight = imgs_folder + "/right/601.jpg"
+    
+    
+    output_points, output_colors = DisparityMap(imgLeft, imgRight)
+    print("Done")
+    output_file = 'pointCloud.ply'
+    # Generate point cloud file
+    create_point_cloud_file(output_points, output_colors, output_file)
 
 
 

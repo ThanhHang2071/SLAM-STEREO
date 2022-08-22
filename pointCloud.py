@@ -34,12 +34,14 @@ stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
 
 Q = cv_file.getNode('q').mat()
 
+print("Q :", Q)
+
 imgL = cv2.imread('images/left/601.jpg')
 imgR = cv2.imread('images/right/601.jpg')
 
-# Show the frames
-cv2.imshow("frame right", imgR) 
-cv2.imshow("frame left", imgL)
+# # Show the frames
+# cv2.imshow("frame right", imgR) 
+# cv2.imshow("frame left", imgL)
 
 cv2.waitKey(0)
 
