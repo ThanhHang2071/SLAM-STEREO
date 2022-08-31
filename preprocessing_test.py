@@ -288,12 +288,12 @@ def DisparityMap(imgLeft, imgRight):
     # cv2.imshow("frame right undistorted", imgR_remap) 
     # cv2.waitKey(0)
     
-    # Downsample each image 3 times (because they're too big)
-    imgL = downsample_image(imgL_remap,3)
-    imgR = downsample_image(imgR_remap,3)
+    # # Downsample each image 3 times (because they're too big)
+    # imgL = downsample_image(imgL_remap,3)
+    # imgR = downsample_image(imgR_remap,3)
 
-    imgLgray = cv2.cvtColor(imgL, cv2.COLOR_BGR2GRAY)
-    imgRgray = cv2.cvtColor(imgR, cv2.COLOR_BGR2GRAY)
+    imgLgray = cv2.cvtColor(imgL_remap, cv2.COLOR_BGR2GRAY)
+    imgRgray = cv2.cvtColor(imgR_remap, cv2.COLOR_BGR2GRAY)
 
     # # Show the frames
     # cv2.imshow("frame right downscaled", imgR) 
@@ -391,7 +391,8 @@ def create_point_cloud_file(vertices, colors, filename):
 if __name__ == '__main__':
     # save_frame()
 
-    imgs_folder = 'images'
+    # imgs_folder = 'images'
+    # imgs_folder = 'a_Tuan/Picture/calibration'
     # intrinsic_matrix_Left, distort_Left, intrinsic_matrix_Right, distort_Right = calib(imgs_folder, square_size=2.8, board_size=(4,3))
     # main(intrinsic_matrix_Left, distort_Left)
     # main(intrinsic_matrix_Left, distort_Left)
@@ -401,18 +402,13 @@ if __name__ == '__main__':
     # showCamRemap()
     
     ## Image choose
-    imgLeft = imgs_folder + "/left/601.jpg"
-    imgRight = imgs_folder + "/right/601.jpg"
+    imgLeft = "E:/RTR/R3D_STEREO/a_Tuan/calibration/Picture/image_L_2186.png"
+    imgRight = "E:/RTR/R3D_STEREO/a_Tuan/calibration/Picture/image_R_2186.png"
     
     
-    output_points, output_colors = DisparityMap(imgLeft, imgRight)
-    print("Done")
-    output_file = 'pointCloud.ply'
-    # Generate point cloud file
-    create_point_cloud_file(output_points, output_colors, output_file)
-
-
-
-
-
-    
+    # output_points, output_colors = DisparityMap(imgLeft, imgRight)
+    # print("Done")
+    # output_file = 'pointCloud.ply'
+    # # Generate point cloud file
+    # create_point_cloud_file(output_points, output_colors, output_file)
+    # sys.exit(1)
