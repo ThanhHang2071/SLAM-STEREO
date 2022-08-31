@@ -34,6 +34,46 @@ def gstreamer_pipeline(
         )
     )
 
+def save_frame():
+    '''
+    Take frames pair from stereo camera
+    '''
+
+    cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
+    # cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1, flip_method=2), cv2.CAP_GSTREAMER)
+
+    # if cap0.isOpened() and cap1.isOpened():
+    if cap0.isOpened():
+        i =0
+        while True:
+
+            ret0, frame0 = cap0.read() # left
+            # ret1, frame1 = cap1.read() # right
+
+            if not ret0:
+                break
+
+            cv2.imshow('test0',frame0)
+            # cv2.imshow('test1', frame1)
+
+            k = cv2.waitKey(1)
+
+            if k == ord('q'):
+                break
+
+            # If space-bar is pressed, save the image
+            if k == ord('s'):
+                cv2.imwrite(f'images/left/{i}.jpg', frame0)
+                # cv2.imwrite(f'images/right/{i}.jpg', frame1)
+            i+=1
+
+    else:
+        print("Can't open cameras")
+
+    cap0.release()
+    # cap1.release()
+    cv2.destroyAllWindows()
+
 
 def calib(dir_path, square_size=1, board_size=(7,6)):
     '''
@@ -50,7 +90,7 @@ def calib(dir_path, square_size=1, board_size=(7,6)):
 
     # Coordinates of squares in the checkerboard world space
     
-    print('Start cpmpute objp')
+    print('Start compute objp')
     objp = np.zeros((rows*cols,3), np.float32)
     objp[:,:2] = np.mgrid[0:rows,0:cols].T.reshape(-1,2)
     objp = world_scaling* objp
@@ -132,53 +172,71 @@ def calib(dir_path, square_size=1, board_size=(7,6)):
         print('rmse:', retR)
         print('camera matrix:\n', cmtxR)
         print('distortion coeffs:', distR)
+        
+        # Returns the new camera matrix based on the free scaling parameter
+        heightL, widthL, channelsL = imgL.shape
+        newcmtxL, roi_L = cv2.getOptimalNewCameraMatrix(cmtxL, distL, (widthL, heightL), 1, (widthL, heightL))
+        heightR, widthR, channelsR = imgR.shape
+        newcmtxR, roi_R = cv2.getOptimalNewCameraMatrix(cmtxR, distR, (widthR, heightR), 1, (widthR, heightR))
+        
+        
+        
     else:
         print(len(objpoints))
         print(len(imgpointsL))
         print(len(imgpointsR))
         sys.exit("not enough points to calibrate")
 
-    return cmtxL, distL, cmtxR, distR, imgL_good, imgR_good
+    ########## Stereo Vision Calibration #############################################
 
-def save_frame():
-    '''
-    Take frames pair from stereo camera
-    '''
+    flags = 0
+    flags |= cv2.CALIB_FIX_INTRINSIC
+    # Here we fix the intrinsic camara matrixes so that only Rot, Trns, Emat and Fmat are calculated.
+    # Hence intrinsic parameters are the same 
 
-    cap0 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=0, flip_method=2), cv2.CAP_GSTREAMER)
-    # cap1 = cv2.VideoCapture(gstreamer_pipeline(sensor_id=1, flip_method=2), cv2.CAP_GSTREAMER)
+    criteria_stereo = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    # if cap0.isOpened() and cap1.isOpened():
-    if cap0.isOpened():
-        i =0
-        while True:
+    # This step is performed to transformation between the two cameras and calculate Essential and Fundamenatl matrix
+    retStereo, newcmtxL, distL, newcmtxR, distR, rot, trans, essentialMatrix, fundamentalMatrix = cv2.stereoCalibrate(objpoints, imgpointsL, imgpointsR, newcmtxL, distL, newcmtxR, distR, grayL.shape[::-1], criteria_stereo, flags)
 
-            ret0, frame0 = cap0.read() # left
-            # ret1, frame1 = cap1.read() # right
 
-            if not ret0:
-                break
 
-            cv2.imshow('test0',frame0)
-            # cv2.imshow('test1', frame1)
 
-            k = cv2.waitKey(1)
 
-            if k == ord('q'):
-                break
+    # Reprojection Error
+    mean_error = 0
 
-            # If space-bar is pressed, save the image
-            if k == ord('s'):
-                cv2.imwrite(f'images/left/{i}.jpg', frame0)
-                # cv2.imwrite(f'images/right/{i}.jpg', frame1)
-            i+=1
+    for i in range(len(objpoints)):
+        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecsL[i], tvecsL[i], newcmtxL, distL)
+        error = cv2.norm(imgpointsL[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+        mean_error += error
 
-    else:
-        print("Can't open cameras")
 
-    cap0.release()
-    # cap1.release()
-    cv2.destroyAllWindows()
+    print("total error: {}".format(mean_error/len(objpoints)))        
+    
+    
+    ########## Stereo Rectification #################################################
+
+    rectifyScale= 1
+    rectL, rectR, projMatrixL, projMatrixR, Q, roi_L, roi_R= cv2.stereoRectify(newcmtxL, distL, newcmtxR, distR, grayL.shape[::-1], rot, trans, rectifyScale,(0,0))
+    print(Q)
+
+    stereoMapL = cv2.initUndistortRectifyMap(newcmtxL, distL, rectL, projMatrixL, grayL.shape[::-1], cv2.CV2_16SC2)
+    stereoMapR = cv2.initUndistortRectifyMap(newcmtxR, distR, rectR, projMatrixR, grayR.shape[::-1], cv2.CV2_16SC2)
+
+    print("Saving parameters!")
+    cv_file = cv2.FileStorage('stereoMap.xml', cv2.FILE_STORAGE_WRITE)
+
+    cv_file.write('stereoMapL_x',stereoMapL[0])
+    cv_file.write('stereoMapL_y',stereoMapL[1])
+    cv_file.write('stereoMapR_x',stereoMapR[0])
+    cv_file.write('stereoMapR_y',stereoMapR[1])
+    cv_file.write('q', Q)
+
+    cv_file.release()
+
+
+    return newcmtxL, distL, newcmtxR, distR, imgL_good, imgR_good
 
 
 def showCamRemap():
