@@ -303,7 +303,9 @@ def getNodes(cv_file):
     stereoMapR_x = cv_file.getNode('stereoMapR_x').mat()
     stereoMapR_y = cv_file.getNode('stereoMapR_y').mat()
     
-    return stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y
+    Q = cv_file.getNode('q').mat()
+    
+    return stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y, Q
 
 def frame_remap(cap0, cap1, imgRight, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y):
     ret0, frame0 = cap0.read() # left
@@ -329,7 +331,7 @@ def DisparityMap(imgLeft, imgRight):
     
     cv_file = readFileMap()
 
-    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y = getNodes(cv_file)
+    stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y, Q = getNodes(cv_file)
     
     
     imgL_remap,  imgL, imgR_remap,  imgR = image_remap(imgLeft, imgRight, stereoMapL_x, stereoMapL_y, stereoMapR_x, stereoMapR_y)
@@ -399,11 +401,11 @@ def DisparityMap(imgLeft, imgRight):
 
     # Get new downsampled width and height 
     h,w = imgR.shape[:2]
-    f = 0.8 * w  # guess for focal length
-    Q = np.float32([[1, 0, 0, -0.5 * w],
-                    [0, -1, 0, 0.5 * h],  # turn points 180 deg around x-axis,
-                    [0, 0, 0, -f],  # so that y-axis looks up
-                    [0, 0, 1, 0]])
+    # f = 0.8 * w  # guess for focal length
+    # Q = np.float32([[1, 0, 0, -0.5 * w],
+    #                 [0, -1, 0, 0.5 * h],  # turn points 180 deg around x-axis,
+    #                 [0, 0, 0, -f],  # so that y-axis looks up
+    #                 [0, 0, 1, 0]])
 
     # Convert disparity map to float32 and divide by 16 as show in the documentation
     print("disparity_map.dtype : ", disparity_map.dtype)
